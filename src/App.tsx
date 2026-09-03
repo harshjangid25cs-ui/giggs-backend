@@ -60,7 +60,8 @@ export function App() {
     if (path.startsWith('/join/')) {
       return 'resident_invite';
     }
-    return 'welcome';
+    const saved = localStorage.getItem('giggs_current_screen');
+    return (saved as ScreenId) || 'welcome';
   });
   const [currentRole, setCurrentRole] = useState<UserRole>(() => {
     const path = window.location.pathname;
@@ -73,7 +74,27 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('giggs_current_role', currentRole);
   }, [currentRole]);
-  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('giggs_current_screen', currentScreen);
+  }, [currentScreen]);
+
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
+    try {
+      const saved = localStorage.getItem('giggs_auth_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (authSession) {
+      localStorage.setItem('giggs_auth_session', JSON.stringify(authSession));
+    } else {
+      localStorage.removeItem('giggs_auth_session');
+    }
+  }, [authSession]);
 
   // User Registration State
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>(() => {
@@ -125,7 +146,6 @@ export function App() {
     }
 
     // Use real DB UUID if available, otherwise use the known fallback staff UUID
-    // This prevents 'invalid input syntax for type uuid' errors when calling RPCs
     const FALLBACK_STAFF_ID = '22222222-2222-2222-2222-222222222222'; // Amit Sharma (society_staff)
     const sessionUser = {
       id: realUserId || FALLBACK_STAFF_ID,
@@ -154,25 +174,56 @@ export function App() {
   // Listen for Supabase OAuth Callback
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
           const email = session.user.email;
           if (email) {
-            // We use the email to check if the user is registered in our mock store
-            // Note: Since we don't know the role immediately from Google OAuth unless
-            // stored in metadata, we might have to infer it or redirect to role selector.
-            // For now, let's just show a success toast and assume Resident if not found
-            addToast('success', 'Google Login Successful', `Welcome ${email}`);
-            
+            // 1. Check if user exists in Supabase DB
+            try {
+              const { data: dbUser } = await supabase
+                .from('users')
+                .select('*')
+                .eq('email', email)
+                .single();
+
+              if (dbUser) {
+                const userRole = (dbUser.role === 'society_staff' ? 'society' : dbUser.role) as UserRole;
+                const sessionUser = {
+                  id: dbUser.id,
+                  name: dbUser.name,
+                  phone: dbUser.phone,
+                  email: dbUser.email,
+                  role: userRole,
+                  societyId: dbUser.society_id,
+                  flatNo: dbUser.flat_no
+                };
+                setAuthSession({
+                  user: sessionUser,
+                  role: userRole,
+                  isAuthenticated: true
+                });
+                setCurrentRole(userRole);
+                const dashScreen = userRole === 'resident' ? 'resident_home' :
+                                   userRole === 'society' ? 'society_dashboard' : 'worker_dashboard';
+                setCurrentScreen(dashScreen);
+                addToast('success', 'Logged In Successfully', `Welcome back ${dbUser.name || email}`);
+                return;
+              }
+            } catch (e) {
+              console.warn('DB check for OAuth user failed:', e);
+            }
+
+            // 2. Check local registered users store
             const user = registeredUsers.find(u => u.email === email && u.role === currentRole);
             if (user) {
               const dashScreen = user.role === 'resident' ? 'resident_home' :
                                  user.role === 'society' ? 'society_dashboard' : 'worker_dashboard';
               setCurrentRole(user.role);
               setCurrentScreen(dashScreen);
+              addToast('success', 'Logged In Successfully', `Welcome back ${user.name || email}`);
             } else {
-              // Not registered -> direct to the register screen for their currently selected role
-              addToast('error', 'Account Not Registered!', `Redirecting to register...`);
+              // 3. User is NOT registered -> Redirect to Registration page
+              addToast('warning', 'Account Not Registered!', `No account found for "${email}". Redirecting you to register...`);
               
               if (currentRole === 'society') {
                 setCurrentScreen('society_register');
@@ -190,7 +241,7 @@ export function App() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [registeredUsers]);
+  }, [registeredUsers, currentRole]);
 
   // Fetch real service visits when logged in as society
   useEffect(() => {
