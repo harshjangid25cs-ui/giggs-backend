@@ -165,7 +165,14 @@ export function App() {
   };
 
   // Core Data Collections
-  const [serviceVisits, setServiceVisits] = useState<ServiceVisit[]>(INITIAL_SERVICE_VISITS);
+  const [serviceVisits, setServiceVisits] = useState<ServiceVisit[]>(() => {
+    try {
+      const saved = localStorage.getItem('giggs_service_visits');
+      return saved ? JSON.parse(saved) : INITIAL_SERVICE_VISITS;
+    } catch {
+      return INITIAL_SERVICE_VISITS;
+    }
+  });
   const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
   const [workerJobs, setWorkerJobs] = useState<WorkerJob[]>(INITIAL_WORKER_JOBS);
   const [adminStats, setAdminStats] = useState({ societyCount: 0, workerCount: 0, gmv: 0, fulfillmentRate: 99.4 });
@@ -243,63 +250,88 @@ export function App() {
     };
   }, [registeredUsers, currentRole]);
 
+  // Helper to map DB visits to local ServiceVisit type
+  const mapDbVisitsToLocal = (data: any[]): ServiceVisit[] => {
+    return data.map(dbVisit => {
+      const joinedCount = dbVisit.jobs?.[0]?.count || 0;
+      const sortedTiers = (dbVisit.tiers || []).map((t: any) => ({
+        id: t.id,
+        name: t.label,
+        minParticipants: t.min_participants,
+        maxParticipants: t.max_participants,
+        price: t.price
+      })).sort((a: any, b: any) => a.minParticipants - b.minParticipants);
+
+      let activeTierIdx = 0;
+      for (let i = 0; i < sortedTiers.length; i++) {
+        if (joinedCount >= sortedTiers[i].minParticipants) {
+          activeTierIdx = i;
+        }
+      }
+      const currentRate = sortedTiers[activeTierIdx]?.price || 0;
+      const originalRate = sortedTiers[0]?.price ? sortedTiers[0].price + 150 : 0;
+
+      return {
+        id: dbVisit.id,
+        title: dbVisit.service?.title || 'Unknown Service',
+        category: dbVisit.service?.category || 'general',
+        societyName: dbVisit.society?.name || 'Unknown Society',
+        address: dbVisit.society?.address || '',
+        date: dbVisit.date,
+        timeWindow: dbVisit.time_window,
+        proName: dbVisit.worker?.users?.name || 'Assigned Pro',
+        proRating: dbVisit.worker?.rating || 4.5,
+        proReviewsCount: 0,
+        proPhoto: dbVisit.worker?.users?.avatar_url || ASSET_IMAGES.workerRajeshAssign,
+        proSpecialty: 'Professional',
+        currentRate,
+        originalRate,
+        joinedCount,
+        targetCount: dbVisit.capacity,
+        status: dbVisit.status as ServiceVisit['status'],
+        description: dbVisit.service?.description || '',
+        tiers: sortedTiers,
+        shareToken: dbVisit.share_token
+      };
+    });
+  };
+
+  // Persist service visits to localStorage whenever they change
+  useEffect(() => {
+    try {
+      if (serviceVisits.length > 0) {
+        localStorage.setItem('giggs_service_visits', JSON.stringify(serviceVisits));
+      }
+    } catch (e) {
+      console.warn('Failed to persist service visits', e);
+    }
+  }, [serviceVisits]);
+
   // Fetch real service visits when logged in as society
+  const refreshServiceVisits = async (societyId: string) => {
+    try {
+      const data = await fetchServiceVisitsForSociety(societyId);
+      if (data && data.length > 0) {
+        const mappedVisits = mapDbVisitsToLocal(data);
+        setServiceVisits(mappedVisits);
+      }
+    } catch (e) {
+      console.error('Failed to refresh service visits:', e);
+    }
+  };
+
   useEffect(() => {
     if (authSession?.user?.societyId && (currentRole === 'society' || currentRole === 'resident' || currentRole === 'worker')) {
-      fetchServiceVisitsForSociety(authSession.user.societyId).then(data => {
-        if (data && data.length > 0) {
-          const mappedVisits: ServiceVisit[] = data.map(dbVisit => {
-            // Count registered jobs
-            // In a real scenario we'd do a count query or join, but for MVP we assume 0 or need to fetch jobs
-              const joinedCount = dbVisit.jobs?.[0]?.count || 0; // Fetched from jobs table
-              const sortedTiers = (dbVisit.tiers || []).map((t: any) => ({
-                id: t.id,
-                name: t.label,
-                minParticipants: t.min_participants,
-                maxParticipants: t.max_participants,
-                price: t.price
-              })).sort((a: any, b: any) => a.minParticipants - b.minParticipants);
-
-              let activeTierIdx = 0;
-              for (let i = 0; i < sortedTiers.length; i++) {
-                if (joinedCount >= sortedTiers[i].minParticipants) {
-                  activeTierIdx = i;
-                }
-              }
-              const currentRate = sortedTiers[activeTierIdx]?.price || 0;
-              const originalRate = sortedTiers[0]?.price ? sortedTiers[0].price + 150 : 0;
-
-              return {
-                id: dbVisit.id,
-                title: dbVisit.service?.title || 'Unknown Service',
-                category: dbVisit.service?.category || 'general',
-                societyName: dbVisit.society?.name || 'Unknown Society',
-                address: dbVisit.society?.address || '',
-                date: dbVisit.date,
-                timeWindow: dbVisit.time_window,
-                proName: dbVisit.worker?.users?.name || 'Assigned Pro',
-                proRating: dbVisit.worker?.rating || 4.5,
-                proReviewsCount: 0,
-                proPhoto: dbVisit.worker?.users?.avatar_url || ASSET_IMAGES.workerRajeshAssign,
-                proSpecialty: 'Professional',
-                currentRate,
-                originalRate,
-                joinedCount,
-                targetCount: dbVisit.capacity,
-                status: dbVisit.status as ServiceVisit['status'],
-                description: dbVisit.service?.description || '',
-                tiers: sortedTiers,
-              shareToken: dbVisit.share_token
-            };
-          });
-          setServiceVisits(prev => {
-            // Merge with local to not lose unsaved ones or we can just replace
-            return mappedVisits.length > 0 ? mappedVisits : prev;
-          });
-        }
-      });
+      refreshServiceVisits(authSession.user.societyId);
     }
   }, [authSession?.user?.societyId, currentRole]);
+
+  // Also re-fetch when navigating to society_dashboard
+  useEffect(() => {
+    if (currentScreen === 'society_dashboard' && authSession?.user?.societyId) {
+      refreshServiceVisits(authSession.user.societyId);
+    }
+  }, [currentScreen]);
 
   const [workerVisits, setWorkerVisits] = useState<ServiceVisit[]>([]);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
@@ -365,56 +397,7 @@ export function App() {
       const societyId = authSession.user.societyId;
       
       const handleRealtimeUpdate = async () => {
-        try {
-          const data = await fetchServiceVisitsForSociety(societyId);
-          if (data && data.length > 0) {
-            const mappedVisits: ServiceVisit[] = data.map(dbVisit => {
-              const joinedCount = dbVisit.jobs?.[0]?.count || 0; // Fetched from jobs table
-              const sortedTiers = (dbVisit.tiers || []).map((t: any) => ({
-                id: t.id,
-                name: t.label,
-                minParticipants: t.min_participants,
-                maxParticipants: t.max_participants,
-                price: t.price
-              })).sort((a: any, b: any) => a.minParticipants - b.minParticipants);
-
-              let activeTierIdx = 0;
-              for (let i = 0; i < sortedTiers.length; i++) {
-                if (joinedCount >= sortedTiers[i].minParticipants) {
-                  activeTierIdx = i;
-                }
-              }
-              const currentRate = sortedTiers[activeTierIdx]?.price || 0;
-              const originalRate = sortedTiers[0]?.price ? sortedTiers[0].price + 150 : 0;
-
-              return {
-                id: dbVisit.id,
-                title: dbVisit.service?.title || 'Unknown Service',
-                category: dbVisit.service?.category || 'general',
-                societyName: dbVisit.society?.name || 'Unknown Society',
-                address: dbVisit.society?.address || '',
-                date: dbVisit.date,
-                timeWindow: dbVisit.time_window,
-                proName: dbVisit.worker?.users?.name || 'Assigned Pro',
-                proRating: dbVisit.worker?.rating || 4.5,
-                proReviewsCount: 0,
-                proPhoto: dbVisit.worker?.users?.avatar_url || ASSET_IMAGES.workerRajeshAssign,
-                proSpecialty: 'Professional',
-                currentRate,
-                originalRate,
-                joinedCount,
-                targetCount: dbVisit.capacity,
-                status: dbVisit.status as ServiceVisit['status'],
-                description: dbVisit.service?.description || '',
-                tiers: sortedTiers,
-                shareToken: dbVisit.share_token
-              };
-            });
-            setServiceVisits(mappedVisits);
-          }
-        } catch (e) {
-          console.error("Failed to fetch realtime service visits", e);
-        }
+        await refreshServiceVisits(societyId);
       };
 
       const jobsSubscription = supabase
@@ -571,6 +554,7 @@ export function App() {
 
     try {
       let residentId = authSession?.user?.id;
+      const residentName = authSession?.user?.name || `Flat ${flatNo} Resident`;
       
       if (!residentId) {
         // Find by phone or use default demo resident
@@ -583,8 +567,13 @@ export function App() {
         residentId = userData?.id || '11111111-1111-1111-1111-111111111111'; // Fallback to Arun Verma
       }
 
-      await registerResidentForVisit(visitId, residentId, flatNo, slot);
-    } catch (error) {
+      // Pass phone and name so the API can create a user row if needed
+      await registerResidentForVisit(visitId, residentId, flatNo, slot, phone, residentName);
+    } catch (error: any) {
+      if (error?.message?.includes('expired')) {
+        addToast('error', 'Link Expired', error.message);
+        return;
+      }
       console.warn('Could not register in Supabase. Falling back to local state.', error);
     }
 
@@ -819,11 +808,27 @@ export function App() {
     
     // Always update local state for immediate UI responsiveness
     setServiceVisits((prev) => [newVisit, ...prev]);
+    
+    // Persist to localStorage immediately
+    try {
+      const currentVisits = JSON.parse(localStorage.getItem('giggs_service_visits') || '[]');
+      localStorage.setItem('giggs_service_visits', JSON.stringify([newVisit, ...currentVisits]));
+    } catch (e) {
+      console.warn('Failed to persist visit to localStorage', e);
+    }
+    
     addToast(
       'success',
       'Service Visit Published!',
       `${newVisit.title} is now open for residents of Green Valley.`
     );
+
+    // Re-fetch from DB to sync share token and IDs
+    if (authSession?.user?.societyId) {
+      setTimeout(() => {
+        refreshServiceVisits(authSession.user!.societyId!);
+      }, 1500);
+    }
   };
 
   const handleShareLink = (visit: ServiceVisit) => {
@@ -968,16 +973,18 @@ export function App() {
         const searchParams = new URLSearchParams(window.location.search);
         const token = searchParams.get('token');
         
-        let targetVisit = serviceVisits[0];
+        let targetVisit: ServiceVisit | undefined = undefined;
         if (path.startsWith('/join/')) {
           const id = path.split('/')[2];
-          // Look up locally (if mock)
+          // Look up locally first
           const found = serviceVisits.find(v => v.id === id);
           if (found) {
              targetVisit = found;
           }
-          // Note: In a fully wired flow, we'd also trigger getServiceVisitByToken(id, token) 
-          // here if not found locally or strictly enforcing security.
+          // If not found locally, ResidentInviteView will fetch from DB via getServiceVisitByToken
+        } else {
+          // Not a /join/ URL — use the first visit if available
+          targetVisit = serviceVisits[0];
         }
         return (
           <ResidentInviteView

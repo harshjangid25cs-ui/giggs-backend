@@ -20,11 +20,25 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
   const [timeSlot, setTimeSlot] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
+  const [isFetching, setIsFetching] = useState(() => {
+    // Start in loading state if there's a token in the URL (shared link flow)
+    const searchParams = new URLSearchParams(window.location.search);
+    const token = searchParams.get('token');
+    const pathParts = window.location.pathname.split('/');
+    const visitId = pathParts[2];
+    return !!(token && visitId);
+  });
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // Sync prop changes to local state (e.g. when parent loads data late)
   useEffect(() => {
-    // If there's a token in the URL, try to securely fetch the visit
+    if (initialVisit && (!visit || visit.id !== initialVisit.id)) {
+      setVisit(initialVisit);
+    }
+  }, [initialVisit]);
+
+  useEffect(() => {
+    // If there's a token in the URL, always fetch from DB (source of truth for shared links)
     const searchParams = new URLSearchParams(window.location.search);
     const token = searchParams.get('token');
     const pathParts = window.location.pathname.split('/');
@@ -82,7 +96,8 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
                 remainingForNextTier: remainForNext > 0 ? remainForNext : 0,
                 status: 'active',
                 description: dbVisit.service?.description || '',
-                tiers
+                tiers,
+                shareToken: token
               });
           }
         } catch (e: any) {
@@ -91,13 +106,16 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
             setFetchError(e.message);
             setVisit(undefined);
           } else {
-            // Fall back to mock state for other generic errors
+            setFetchError('Could not load service visit. The link may be invalid or expired.');
+            setVisit(undefined);
           }
         } finally {
           setIsFetching(false);
         }
       };
       fetchVisit();
+    } else {
+      setIsFetching(false);
     }
   }, []);
 

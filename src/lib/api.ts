@@ -82,13 +82,72 @@ export async function registerResidentForVisit(
   visitId: string, 
   residentId: string, 
   flatNo: string, 
-  requestedTime: string
+  requestedTime: string,
+  phone?: string,
+  name?: string
 ) {
+  // 1. Check expiration BEFORE inserting (check the visit's created_at)
+  const { data: visitRow, error: visitErr } = await supabase
+    .from('service_visits')
+    .select('created_at')
+    .eq('id', visitId)
+    .single();
+
+  if (visitErr) {
+    console.error('Error checking visit expiration:', visitErr);
+    throw visitErr;
+  }
+
+  if (visitRow) {
+    const createdAt = new Date(visitRow.created_at);
+    const now = new Date();
+    const diffInMs = now.getTime() - createdAt.getTime();
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+
+    if (diffInHours > 1) {
+      throw new Error('This invite link has expired. Links are only valid for 1 hour after creation. Please ask the society staff for a new link.');
+    }
+  }
+
+  // 2. Ensure resident exists in users table so the FK is valid and name/phone show in queue
+  let actualResidentId = residentId;
+  
+  // If we have a phone, try to find existing user first
+  if (phone) {
+    const cleanPhone = phone.replace(/\s+/g, '');
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .or(`phone.eq.${cleanPhone},phone.eq.${phone}`)
+      .limit(1)
+      .single();
+
+    if (existingUser?.id) {
+      actualResidentId = existingUser.id;
+    } else {
+      // Create a new user row for this resident so data shows in queue
+      const { data: newUser, error: newUserErr } = await supabase
+        .from('users')
+        .insert({
+          name: name || `Flat ${flatNo} Resident`,
+          phone: phone,
+          role: 'resident'
+        } as any)
+        .select()
+        .single();
+
+      if (newUser && !newUserErr) {
+        actualResidentId = newUser.id;
+      }
+    }
+  }
+
+  // 3. Insert job with the validated resident ID
   const { data, error } = await supabase
     .from('jobs')
     .insert({
       service_visit_id: visitId,
-      resident_id: residentId,
+      resident_id: actualResidentId,
       flat_no: flatNo,
       requested_time: requestedTime,
       status: 'pending'
@@ -99,16 +158,6 @@ export async function registerResidentForVisit(
   if (error) {
     console.error('Error registering resident:', error);
     throw error;
-  }
-
-  // Check 1-hour expiration from visit creation time
-  const createdAt = new Date(data.created_at);
-  const now = new Date();
-  const diffInMs = now.getTime() - createdAt.getTime();
-  const diffInHours = diffInMs / (1000 * 60 * 60);
-
-  if (diffInHours > 1) {
-    throw new Error('This invite link has expired. Links are only valid for 1 hour after creation. Please ask the society staff for a new link.');
   }
 
   return data;
@@ -128,14 +177,50 @@ export async function fetchJobsForVisit(visitId: string) {
       requested_time,
       total_amount,
       created_at,
-      resident:users(name, phone)
+      resident_id,
+      resident:users!jobs_resident_id_fkey(name, phone)
     `)
     .eq('service_visit_id', visitId)
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching jobs for visit:', error);
-    return [];
+    // If the explicit FK name fails, retry with the implicit join
+    console.warn('Explicit FK join failed, trying implicit join:', error.message);
+    const { data: data2, error: error2 } = await supabase
+      .from('jobs')
+      .select(`
+        id,
+        flat_no,
+        status,
+        requested_time,
+        total_amount,
+        created_at,
+        resident_id
+      `)
+      .eq('service_visit_id', visitId)
+      .order('created_at', { ascending: true });
+
+    if (error2) {
+      console.error('Error fetching jobs for visit:', error2);
+      return [];
+    }
+
+    // Manually fetch resident info for each job
+    const jobs = data2 || [];
+    const enrichedJobs = await Promise.all(
+      jobs.map(async (job: any) => {
+        if (job.resident_id) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('name, phone')
+            .eq('id', job.resident_id)
+            .single();
+          return { ...job, resident: userData || null };
+        }
+        return { ...job, resident: null };
+      })
+    );
+    return enrichedJobs;
   }
   return data || [];
 }
