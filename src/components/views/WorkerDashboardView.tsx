@@ -35,8 +35,8 @@ export const WorkerDashboardView: React.FC<WorkerDashboardViewProps> = ({
 
   return (
     <div className="min-h-screen bg-[#f9f9f9] text-[#1b1c1c] pb-28 pt-14 px-4 md:px-8 max-w-4xl mx-auto overflow-x-hidden">
-      {/* Header & Status Toggle */}
-      <section className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <section className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-300">
             <img
@@ -54,24 +54,79 @@ export const WorkerDashboardView: React.FC<WorkerDashboardViewProps> = ({
             </p>
           </div>
         </div>
+      </section>
 
-        {/* Online / Offline Toggle */}
-        <button
+      {/* ──────────────── ONLINE / OFFLINE TOGGLE CARD ──────────────── */}
+      <section className="mb-6">
+        <div
           onClick={() => onToggleOnline(!isOnline)}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold transition-all shadow-xs ${
+          className={`relative w-full rounded-2xl p-5 cursor-pointer transition-all duration-300 border-2 select-none ${
             isOnline
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-              : 'bg-slate-100 border-slate-300 text-slate-600'
+              ? 'bg-emerald-50 border-emerald-400 shadow-emerald-100 shadow-md'
+              : 'bg-slate-100 border-slate-300 shadow-sm'
           }`}
         >
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              isOnline ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'
-            }`}
-          ></span>
-          <span>{isOnline ? 'Online & Available' : 'Offline'}</span>
-        </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Animated Status Dot */}
+              <div className={`relative w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${
+                isOnline ? 'bg-emerald-500' : 'bg-slate-400'
+              }`}>
+                {isOnline && (
+                  <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-50" />
+                )}
+                <span className="material-symbols-outlined text-white text-2xl">
+                  {isOnline ? 'wifi' : 'wifi_off'}
+                </span>
+              </div>
+              <div>
+                <p className={`text-lg font-black tracking-tight ${isOnline ? 'text-emerald-800' : 'text-slate-600'}`}>
+                  {isOnline ? 'You are ONLINE' : 'You are OFFLINE'}
+                </p>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  {isOnline
+                    ? 'Residents & staff can see you as available'
+                    : 'Tap to go online and start receiving bookings'}
+                </p>
+                {isOnline && skills.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {skills.slice(0, 3).map(sk => (
+                      <span key={sk} className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                        {sk}
+                      </span>
+                    ))}
+                    {skills.length > 3 && (
+                      <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                        +{skills.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className={`relative w-14 h-8 rounded-full transition-all duration-300 shrink-0 ${
+              isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+            }`}>
+              <div className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-md transition-all duration-300 ${
+                isOnline ? 'left-7' : 'left-1'
+              }`} />
+            </div>
+          </div>
+
+          {isOnline && (
+            <div className="mt-4 pt-3 border-t border-emerald-200 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-xs font-semibold text-emerald-700">
+                Broadcasting your availability to {skills.length > 0 ? skills.join(', ') : 'all categories'} • Tap to go offline
+              </p>
+            </div>
+          )}
+        </div>
       </section>
+      {/* ──────────────────────────────────────────────────────────────── */}
+
 
       {/* Metrics Bento */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">

@@ -102,9 +102,17 @@ export const ResidentBookServiceView: React.FC<ResidentBookServiceViewProps> = (
                 <h3 className="font-bold text-lg text-neutral-900">{service.title}</h3>
                 <p className="text-sm text-neutral-500 line-clamp-2">{service.description}</p>
                 
-                <div className="mt-3 pt-3 border-t border-slate-100 w-full flex items-center gap-2">
-                  <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
-                  <span className="text-xs font-medium text-slate-600">{service.workers.length} verified worker(s) available</span>
+                <div className="mt-3 pt-3 border-t border-slate-100 w-full flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
+                    <span className="text-xs font-medium text-slate-600">{service.workers.length} worker(s)</span>
+                  </div>
+                  {(service.onlineCount || 0) > 0 && (
+                    <div className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-xs font-bold text-emerald-700">{service.onlineCount} online now</span>
+                    </div>
+                  )}
                 </div>
               </button>
             ))}
@@ -133,19 +141,36 @@ export const ResidentBookServiceView: React.FC<ResidentBookServiceViewProps> = (
 
         <div className="space-y-4">
           {selectedService.workers.map(worker => (
-            <div key={worker.id} className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center shadow-xs">
+            <div key={worker.id} className={`bg-white rounded-2xl p-4 md:p-5 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center shadow-xs border-2 transition-all ${
+              worker.is_online ? 'border-emerald-300' : 'border-slate-200'
+            }`}>
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center shrink-0 border border-slate-200">
-                  {worker.avatar_url ? (
-                    <img src={worker.avatar_url} alt={worker.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="material-symbols-outlined text-2xl text-slate-400">person</span>
-                  )}
+                <div className="relative shrink-0">
+                  <div className="w-14 h-14 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center border border-slate-200">
+                    {worker.avatar_url ? (
+                      <img src={worker.avatar_url} alt={worker.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-2xl text-slate-400">person</span>
+                    )}
+                  </div>
+                  {/* Online dot */}
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-white ${
+                    worker.is_online ? 'bg-emerald-500' : 'bg-slate-300'
+                  }`} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-1.5">
+                  <h3 className="font-bold text-lg text-neutral-900 flex items-center gap-2">
                     {worker.name}
                     <span className="material-symbols-outlined text-sm text-emerald-600 fill">verified</span>
+                    {worker.is_online ? (
+                      <span className="text-[10px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full">
+                        ONLINE
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-slate-200 text-slate-500 px-2 py-0.5 rounded-full">
+                        OFFLINE
+                      </span>
+                    )}
                   </h3>
                   <div className="flex items-center gap-3 text-xs text-neutral-600 mt-1 font-medium">
                     <span className="flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
@@ -160,9 +185,14 @@ export const ResidentBookServiceView: React.FC<ResidentBookServiceViewProps> = (
               <div className="w-full md:w-auto mt-2 md:mt-0 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                 <button
                   onClick={() => setSelectedWorker(worker)}
-                  className="w-full bg-black hover:bg-neutral-800 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
+                  className={`w-full text-sm font-semibold px-6 py-2.5 rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 ${
+                    worker.is_online
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-black hover:bg-neutral-800 text-white'
+                  }`}
                 >
-                  <span>Select Worker</span>
+                  <span className="material-symbols-outlined text-sm">{worker.is_online ? 'bolt' : 'person'}</span>
+                  <span>{worker.is_online ? 'Book Now' : 'Select Worker'}</span>
                 </button>
               </div>
             </div>

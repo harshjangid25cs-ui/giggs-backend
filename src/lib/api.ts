@@ -328,6 +328,55 @@ export async function fetchWorkers() {
   return data || [];
 }
 
+/**
+ * Fetches only ONLINE + VERIFIED workers — shown to residents and staff
+ * when they're looking to book or assign a pro.
+ */
+export async function fetchOnlineWorkers(category?: string) {
+  const { data, error } = await supabase
+    .from('workers')
+    .select(`
+      id,
+      rating,
+      total_jobs,
+      identity_verified,
+      is_online,
+      verification_status,
+      users (
+        name,
+        avatar_url,
+        phone
+      ),
+      worker_skills (
+        skill_name,
+        certified
+      )
+    `)
+    .is('removed_at', null)
+    .eq('is_online', true)
+    .eq('verification_status', 'VERIFIED')
+    .order('rating', { ascending: false });
+    
+  if (error) {
+    console.error('Error fetching online workers:', error);
+    return [];
+  }
+  
+  const workers = data || [];
+  
+  // If a category is provided, filter by matching skill
+  if (category) {
+    return workers.filter((w: any) => {
+      const skills = (w.worker_skills || []).map((s: any) => s.skill_name?.toLowerCase());
+      return skills.some((s: string) => matchesCategory(s, category)) || skills.length === 0;
+    });
+  }
+  
+  return workers;
+}
+
+
+
 
 export async function updateWorkerStatus(workerId: string, isOnline: boolean) {
   const { error } = await supabase
@@ -587,6 +636,7 @@ export interface AvailableWorker {
   total_jobs: number;
   avatar_url?: string;
   skills: string[];
+  is_online: boolean;
 }
 
 export interface ServiceWithWorkers {
@@ -596,6 +646,7 @@ export interface ServiceWithWorkers {
   base_price: number;
   description: string;
   workers: AvailableWorker[];
+  onlineCount?: number;
 }
 
 /**
@@ -636,7 +687,7 @@ export function matchesCategory(skillName: string, categoryOrTitle: string): boo
  * Adding/removing a service in admin portal immediately updates this view.
  */
 export async function fetchAvailableServices(): Promise<ServiceWithWorkers[]> {
-  // 1. Fetch ALL registered workers with their skills (no verification filter — admin controls who appears via service categories)
+  // 1. Fetch VERIFIED workers with their skills — only online+verified shown to residents
   let { data: workersData, error: wError } = await supabase
     .from('workers')
     .select(`
@@ -645,6 +696,8 @@ export async function fetchAvailableServices(): Promise<ServiceWithWorkers[]> {
       worker_skills (skill_name, certified)
     `)
     .is('removed_at', null)
+    .eq('verification_status', 'VERIFIED')
+    .order('is_online', { ascending: false }) // online first
     .order('rating', { ascending: false });
 
   if (wError) {
@@ -677,10 +730,19 @@ export async function fetchAvailableServices(): Promise<ServiceWithWorkers[]> {
           avatar_url: w.users?.avatar_url,
           rating: w.rating || 4.9,
           total_jobs: w.total_jobs || 0,
-          skills: skills.length > 0 ? skills : [s.category]
+          skills: skills.length > 0 ? skills : [s.category],
+          is_online: w.is_online || false
         });
       }
     }
+
+    // Only show services that have at least one worker (online or offline)
+    // Sort: online workers first
+    const sorted = matchedWorkers.sort((a, b) => {
+      if (a.is_online && !b.is_online) return -1;
+      if (!a.is_online && b.is_online) return 1;
+      return b.rating - a.rating;
+    });
 
     availableServices.push({
       id: s.id,
@@ -688,7 +750,8 @@ export async function fetchAvailableServices(): Promise<ServiceWithWorkers[]> {
       title: s.title,
       base_price: s.base_price || 299,
       description: s.description || 'Professional society service offering.',
-      workers: matchedWorkers.sort((a, b) => b.rating - a.rating)
+      workers: sorted,
+      onlineCount: sorted.filter(w => w.is_online).length
     });
   }
 

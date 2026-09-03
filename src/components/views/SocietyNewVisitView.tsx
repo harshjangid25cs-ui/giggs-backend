@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ScreenId, ServiceVisit } from '../../types';
 import { ASSET_IMAGES } from '../../data/mockData';
-import { fetchServices, fetchWorkers, matchesCategory } from '../../lib/api';
+import { fetchServices, fetchWorkers, fetchOnlineWorkers, matchesCategory } from '../../lib/api';
 
 interface SocietyNewVisitViewProps {
   onNavigate: (screen: ScreenId) => void;
@@ -14,6 +14,7 @@ export const SocietyNewVisitView: React.FC<SocietyNewVisitViewProps> = ({
 }) => {
   const [services, setServices] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
+  const [onlineWorkers, setOnlineWorkers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [category, setCategory] = useState('');
@@ -30,12 +31,14 @@ export const SocietyNewVisitView: React.FC<SocietyNewVisitViewProps> = ({
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
-      const [fetchedServices, fetchedWorkers] = await Promise.all([
+      const [fetchedServices, fetchedWorkers, fetchedOnline] = await Promise.all([
         fetchServices(),
-        fetchWorkers()
+        fetchWorkers(),
+        fetchOnlineWorkers()
       ]);
       setServices(fetchedServices);
       setWorkers(fetchedWorkers);
+      setOnlineWorkers(fetchedOnline);
       
       if (fetchedServices.length > 0) {
         setCategory(fetchedServices[0].category);
@@ -46,8 +49,12 @@ export const SocietyNewVisitView: React.FC<SocietyNewVisitViewProps> = ({
         setTier3Price(fetchedServices[0].base_price ? fetchedServices[0].base_price - 100 : 399);
       }
       
-      if (fetchedWorkers.length > 0) {
-        setAssignedPro(fetchedWorkers[0].users?.name || '');
+      // Prefer online verified workers
+      const firstOnline = fetchedOnline[0];
+      const firstWorker = fetchedWorkers[0];
+      const defaultWorker = firstOnline || firstWorker;
+      if (defaultWorker?.users?.name) {
+        setAssignedPro(defaultWorker.users.name);
       }
 
       // Set default date
@@ -64,11 +71,19 @@ export const SocietyNewVisitView: React.FC<SocietyNewVisitViewProps> = ({
   const filteredWorkers = workers.filter((pro: any) => {
     const skills = (pro.worker_skills || []).map((sk: any) => sk.skill_name || sk);
     if (pro.skills && Array.isArray(pro.skills)) skills.push(...pro.skills);
-    if (skills.length === 0) return true; // general verified worker if no tags
+    if (skills.length === 0) return true;
     return skills.some((sk: string) => matchesCategory(sk, category));
   });
 
   const displayWorkers = filteredWorkers.length > 0 ? filteredWorkers : workers;
+  
+  // Separate online vs offline for display
+  const displayOnlineIds = new Set(onlineWorkers.map((w: any) => w.id));
+  const sortedDisplayWorkers = [...displayWorkers].sort((a: any, b: any) => {
+    const aOnline = displayOnlineIds.has(a.id) ? 0 : 1;
+    const bOnline = displayOnlineIds.has(b.id) ? 0 : 1;
+    return aOnline - bOnline;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -275,7 +290,9 @@ export const SocietyNewVisitView: React.FC<SocietyNewVisitViewProps> = ({
               <div className="text-sm text-neutral-500">Loading workers...</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {displayWorkers.map((pro: any) => (
+                {sortedDisplayWorkers.map((pro: any) => {
+                  const isOnline = displayOnlineIds.has(pro.id);
+                  return (
                   <label
                     key={pro.id}
                     onClick={() => setAssignedPro(pro.users?.name)}
@@ -285,21 +302,35 @@ export const SocietyNewVisitView: React.FC<SocietyNewVisitViewProps> = ({
                         : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <img
-                      src={pro.users?.avatar_url || ASSET_IMAGES.workerRameshInvited}
-                      alt={pro.users?.name}
-                      className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
-                    />
+                    <div className="relative shrink-0">
+                      <img
+                        src={pro.users?.avatar_url || ASSET_IMAGES.workerRameshInvited}
+                        alt={pro.users?.name}
+                        className="w-9 h-9 rounded-full object-cover border border-slate-200"
+                      />
+                      {/* Online indicator dot */}
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                        isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+                      }`} />
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-neutral-900 truncate">
-                        {pro.users?.name}
+                      <div className="flex items-center gap-1.5">
+                        <div className="text-xs font-bold text-neutral-900 truncate">
+                          {pro.users?.name}
+                        </div>
+                        {isOnline && (
+                          <span className="text-[9px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded-full shrink-0">
+                            ONLINE
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-neutral-500">
                         {pro.rating || '4.9'} ★ • {category}
                       </div>
                     </div>
                   </label>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
