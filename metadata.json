@@ -1,0 +1,6 @@
+{
+  "name": "GIGGS - Society Service Marketplace",
+  "description": "Unlock trusted workers and group pricing for your entire community. Modern hyper-local service marketplace for residents, societies, and service professionals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
