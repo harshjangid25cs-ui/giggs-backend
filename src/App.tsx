@@ -335,7 +335,15 @@ export function App() {
 
   const [workerVisits, setWorkerVisits] = useState<ServiceVisit[]>([]);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
+  const [workerIsOnline, setWorkerIsOnline] = useState<boolean>(false);
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
+
+  // Sync workerIsOnline from workerProfile when it loads
+  useEffect(() => {
+    if (workerProfile !== null) {
+      setWorkerIsOnline(workerProfile.is_online ?? false);
+    }
+  }, [workerProfile]);
 
   // Fetch real worker jobs and profile when logged in as worker
   useEffect(() => {
@@ -1156,26 +1164,29 @@ export function App() {
             jobs={workerJobs}
             visits={workerVisits}
             userName={authSession?.user?.name || 'Worker Pro'}
-            isOnline={workerProfile?.is_online ?? false}
+            isOnline={workerIsOnline}
             skills={workerProfile?.worker_skills?.map((sk: any) => sk.skill_name) || []}
-            onToggleOnline={async (status) => {
-              // 1. Immediately toggle local worker profile state so UI switch flips instantly
+            onToggleOnline={async (newStatus) => {
+              // 1. Flip the dedicated state immediately — this drives the UI switch
+              setWorkerIsOnline(newStatus);
+
+              // 2. Also keep workerProfile in sync
               setWorkerProfile((prev: any) => ({
-                ...(prev || { id: 'worker-demo', is_online: false }),
-                is_online: status
+                ...(prev || {}),
+                is_online: newStatus
               }));
 
-              // 2. Persist to database if worker has a valid ID
+              // 3. Show feedback toast
+              addToast('success', 'Status Updated', `You are now ${newStatus ? 'Online' : 'Offline'}`);
+
+              // 4. Persist to database in background (non-blocking)
               const workerId = workerProfile?.id;
-              if (workerId && !workerId.startsWith('worker-demo')) {
+              if (workerId && !workerId.startsWith('worker-')) {
                 try {
-                  await updateWorkerStatus(workerId, status);
-                  addToast('success', 'Status Updated', `You are now ${status ? 'Online' : 'Offline'}`);
+                  await updateWorkerStatus(workerId, newStatus);
                 } catch (e) {
-                  addToast('error', 'Failed to sync with DB', 'Updated locally.');
+                  console.warn('Could not sync worker online status to DB:', e);
                 }
-              } else {
-                addToast('success', 'Status Updated', `You are now ${status ? 'Online' : 'Offline'}`);
               }
             }}
             onAcceptVisit={async (visitId) => {
