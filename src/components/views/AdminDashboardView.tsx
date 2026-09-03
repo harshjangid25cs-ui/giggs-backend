@@ -61,7 +61,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
   };
 
   useEffect(() => {
-    loadAll();
+    loadAll(true);
 
     const workerSub = supabase
       .channel('admin:workers')
@@ -116,7 +116,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
     };
   }, []);
 
-  const loadAll = async () => {
+  const loadAll = async (isInitial = false) => {
     setLoading(true);
     try {
       const [workers, residents, societies, services, bookings, logs] = await Promise.all([
@@ -156,6 +156,74 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
         skills: (w.worker_skills || []).map((s: any) => s.skill_name).slice(0, 2),
         created_at: w.created_at,
       })));
+
+      if (isInitial) {
+        // Fetch historical events for the live feed
+        const [pastUsers, pastWorkers, pastSocieties, pastJobs, pastVisits] = await Promise.all([
+          supabase.from('users').select('id, name, role, created_at').order('created_at', { ascending: false }).limit(10),
+          supabase.from('workers').select('id, created_at').order('created_at', { ascending: false }).limit(10),
+          supabase.from('societies').select('id, name, created_at').order('created_at', { ascending: false }).limit(10),
+          supabase.from('jobs').select('id, created_at').order('created_at', { ascending: false }).limit(10),
+          supabase.from('service_visits').select('id, created_at').order('created_at', { ascending: false }).limit(10)
+        ]);
+
+        const allEvents: (LiveEvent & { rawDate: Date })[] = [];
+
+        (pastUsers.data || []).forEach(u => {
+          allEvents.push({
+            id: `u-${u.id}`,
+            type: u.role || 'user',
+            label: `New ${u.role || 'user'} registered: ${u.name || 'Unknown'}`,
+            time: new Date(u.created_at).toLocaleTimeString('en-IN'),
+            rawDate: new Date(u.created_at)
+          });
+        });
+
+        (pastWorkers.data || []).forEach(w => {
+          allEvents.push({
+            id: `w-${w.id}`,
+            type: 'worker',
+            label: `New worker registered (…${String(w.id).slice(-6)})`,
+            time: new Date(w.created_at).toLocaleTimeString('en-IN'),
+            rawDate: new Date(w.created_at)
+          });
+        });
+
+        (pastSocieties.data || []).forEach(s => {
+          allEvents.push({
+            id: `s-${s.id}`,
+            type: 'society',
+            label: `New society added: ${s.name || 'Unknown'}`,
+            time: new Date(s.created_at).toLocaleTimeString('en-IN'),
+            rawDate: new Date(s.created_at)
+          });
+        });
+
+        (pastJobs.data || []).forEach(j => {
+          allEvents.push({
+            id: `j-${j.id}`,
+            type: 'job',
+            label: 'New resident job/booking registered',
+            time: new Date(j.created_at).toLocaleTimeString('en-IN'),
+            rawDate: new Date(j.created_at)
+          });
+        });
+
+        (pastVisits.data || []).forEach(v => {
+          allEvents.push({
+            id: `v-${v.id}`,
+            type: 'visit',
+            label: 'New service visit created',
+            time: new Date(v.created_at).toLocaleTimeString('en-IN'),
+            rawDate: new Date(v.created_at)
+          });
+        });
+
+        // Sort by rawDate descending and take top 30
+        allEvents.sort((a, b) => b.rawDate.getTime() - a.rawDate.getTime());
+        setLiveEvents(allEvents.slice(0, 30).map(({ rawDate, ...rest }) => rest));
+      }
+
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
