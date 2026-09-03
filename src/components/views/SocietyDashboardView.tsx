@@ -107,21 +107,21 @@ ${shareUrl}
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-emerald-100 text-emerald-800';
-      case 'in_progress': return 'bg-blue-100 text-blue-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      case 'pending': return 'bg-emerald-100 text-emerald-800'; // Show as Registered (green)
-      default: return 'bg-emerald-100 text-emerald-800';
+      case 'completed': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+      case 'in_progress': return 'bg-blue-100 text-blue-800 border border-blue-300';
+      case 'cancelled': return 'bg-red-100 text-red-800 border border-red-300';
+      case 'pending': return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
+      default: return 'bg-emerald-100 text-emerald-800 border border-emerald-300';
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'pending': return 'Registered';
+      case 'pending': return 'Successfully Registered';
       case 'in_progress': return 'In Progress';
       case 'completed': return 'Completed';
       case 'cancelled': return 'Cancelled';
-      default: return 'Registered';
+      default: return 'Successfully Registered';
     }
   };
 

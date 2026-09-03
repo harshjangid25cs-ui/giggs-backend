@@ -553,22 +553,10 @@ export function App() {
     let currentRate = 499;
 
     try {
-      let residentId = authSession?.user?.id;
-      // Prefer the name entered in the form, then session name, then flat-based fallback
-      const residentName = name || authSession?.user?.name || `Flat ${flatNo} Resident`;
-      
-      if (!residentId) {
-        // Find by phone or use default demo resident
-        const { data: userData } = await supabase
-          .from('users')
-          .select('id')
-          .eq('phone', phone)
-          .single();
-          
-        residentId = userData?.id || '11111111-1111-1111-1111-111111111111';
-      }
+      const residentName = name?.trim() || authSession?.user?.name || `Flat ${flatNo} Resident`;
+      const residentId = authSession?.user?.id || '';
 
-      // Pass phone and name so the API can create a user row if needed
+      // Pass phone and name so the API creates or updates a real user row
       await registerResidentForVisit(visitId, residentId, flatNo, slot, phone, residentName);
     } catch (error: any) {
       if (error?.message?.includes('expired')) {
@@ -643,6 +631,19 @@ export function App() {
     };
     
     setBookings((prev) => [newBooking, ...prev]);
+    
+    const newWorkerJob: WorkerJob = {
+      id: `job-${Date.now()}`,
+      visitId: visitId,
+      aptNo: flatNo,
+      residentName: name?.trim() || `Flat ${flatNo} Resident`,
+      serviceTitle: visitTitle,
+      status: 'pending',
+      requestedTime: slot || 'Any time during the day',
+      price: currentRate,
+      category: visitCategory
+    };
+    setWorkerJobs((prev) => [newWorkerJob, ...prev]);
     
     addToast(
       'success',

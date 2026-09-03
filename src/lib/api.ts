@@ -109,36 +109,79 @@ export async function registerResidentForVisit(
     }
   }
 
-  // 2. Ensure resident exists in users table so the FK is valid and name/phone show in queue
-  let actualResidentId = residentId;
-  
-  // If we have a phone, try to find existing user first
-  if (phone) {
-    const cleanPhone = phone.replace(/\s+/g, '');
+  // 2. Ensure resident exists in users table with real submitted name & phone
+  let actualResidentId: string | null = null;
+  const realName = name?.trim() || `Flat ${flatNo} Resident`;
+  const realPhone = phone?.trim() || '';
+
+  if (realPhone) {
+    const cleanPhone = realPhone.replace(/\s+/g, '');
+    // Search existing user by phone, excluding default demo ID
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
-      .or(`phone.eq.${cleanPhone},phone.eq.${phone}`)
+      .or(`phone.eq.${cleanPhone},phone.eq.${realPhone}`)
+      .neq('id', '11111111-1111-1111-1111-111111111111')
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (existingUser?.id) {
       actualResidentId = existingUser.id;
-    } else {
-      // Create a new user row for this resident so data shows in queue
-      const { data: newUser, error: newUserErr } = await supabase
+      // Update existing user with real name & phone provided in registration link
+      await supabase
         .from('users')
-        .insert({
-          name: name || `Flat ${flatNo} Resident`,
-          phone: phone,
-          role: 'resident'
+        .update({
+          name: realName,
+          phone: realPhone,
+          flat_no: flatNo
         } as any)
-        .select()
-        .single();
+        .eq('id', existingUser.id);
+    }
+  }
 
-      if (newUser && !newUserErr) {
-        actualResidentId = newUser.id;
-      }
+  // If no user found by phone, insert a new user with real details
+  if (!actualResidentId) {
+    const { data: newUser, error: newUserErr } = await supabase
+      .from('users')
+      .insert({
+        name: realName,
+        phone: realPhone,
+        role: 'resident',
+        flat_no: flatNo
+      } as any)
+      .select()
+      .single();
+
+    if (newUser && !newUserErr) {
+      actualResidentId = newUser.id;
+    } else if (residentId && residentId !== '11111111-1111-1111-1111-111111111111') {
+      actualResidentId = residentId;
+      await supabase
+        .from('users')
+        .update({
+          name: realName,
+          phone: realPhone,
+          flat_no: flatNo
+        } as any)
+        .eq('id', residentId);
+    }
+  }
+
+  // Ultimate fallback user creation if needed
+  if (!actualResidentId) {
+    const { data: fallbackUser } = await supabase
+      .from('users')
+      .insert({
+        name: realName,
+        phone: realPhone || `+91 ${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        role: 'resident',
+        flat_no: flatNo
+      } as any)
+      .select()
+      .single();
+
+    if (fallbackUser) {
+      actualResidentId = fallbackUser.id;
     }
   }
 
@@ -184,7 +227,7 @@ export async function fetchJobsForVisit(visitId: string) {
     .order('created_at', { ascending: true });
 
   if (error) {
-    // If the explicit FK name fails, retry with the implicit join
+    // If explicit FK join fails, retry with implicit join
     console.warn('Explicit FK join failed, trying implicit join:', error.message);
     const { data: data2, error: error2 } = await supabase
       .from('jobs')
@@ -215,14 +258,17 @@ export async function fetchJobsForVisit(visitId: string) {
             .select('name, phone')
             .eq('id', job.resident_id)
             .single();
-          return { ...job, resident: userData || null };
+          return { ...job, resident: userData || { name: `Flat ${job.flat_no} Resident`, phone: '' } };
         }
-        return { ...job, resident: null };
+        return { ...job, resident: { name: `Flat ${job.flat_no} Resident`, phone: '' } };
       })
     );
     return enrichedJobs;
   }
-  return data || [];
+  return (data || []).map((job: any) => ({
+    ...job,
+    resident: job.resident || { name: `Flat ${job.flat_no} Resident`, phone: '' }
+  }));
 }
 
 export async function updateJobStatus(
