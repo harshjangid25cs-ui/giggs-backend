@@ -75,16 +75,6 @@ export async function getServiceVisitByToken(visitId: string, token: string) {
     throw error;
   }
 
-  // Check 1-hour expiration
-  const createdAt = new Date(data.created_at);
-  const now = new Date();
-  const diffInMs = now.getTime() - createdAt.getTime();
-  const diffInHours = diffInMs / (1000 * 60 * 60);
-
-  if (diffInHours > 1) {
-    throw new Error('This invite link has expired. Links are only valid for 1 hour after creation.');
-  }
-
   return data;
 }
 
@@ -112,6 +102,32 @@ export async function registerResidentForVisit(
   }
 
   return data;
+}
+
+/**
+ * Fetches all registered residents (jobs) for a specific service visit.
+ * Used by the Society Staff portal to show the live queue.
+ */
+export async function fetchJobsForVisit(visitId: string) {
+  const { data, error } = await supabase
+    .from('jobs')
+    .select(`
+      id,
+      flat_no,
+      status,
+      requested_time,
+      total_amount,
+      created_at,
+      resident:users(name, phone)
+    `)
+    .eq('service_visit_id', visitId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching jobs for visit:', error);
+    return [];
+  }
+  return data || [];
 }
 
 export async function updateJobStatus(
