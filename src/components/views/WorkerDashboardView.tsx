@@ -59,17 +59,25 @@ export const WorkerDashboardView: React.FC<WorkerDashboardViewProps> = ({
       {/* ──────────────── ONLINE / OFFLINE TOGGLE CARD ──────────────── */}
       <section className="mb-6">
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => onToggleOnline(!isOnline)}
-          className={`relative w-full rounded-2xl p-5 cursor-pointer transition-all duration-300 border-2 select-none ${
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onToggleOnline(!isOnline);
+            }
+          }}
+          className={`relative w-full rounded-2xl p-5 cursor-pointer transition-all duration-300 border-2 select-none active:scale-[0.99] ${
             isOnline
               ? 'bg-emerald-50 border-emerald-400 shadow-emerald-100 shadow-md'
-              : 'bg-slate-100 border-slate-300 shadow-sm'
+              : 'bg-slate-100 border-slate-300 shadow-sm hover:border-slate-400'
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {/* Animated Status Dot */}
-              <div className={`relative w-14 h-14 rounded-full flex items-center justify-center shrink-0 ${
+              <div className={`relative w-14 h-14 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300 ${
                 isOnline ? 'bg-emerald-500' : 'bg-slate-400'
               }`}>
                 {isOnline && (
@@ -80,13 +88,13 @@ export const WorkerDashboardView: React.FC<WorkerDashboardViewProps> = ({
                 </span>
               </div>
               <div>
-                <p className={`text-lg font-black tracking-tight ${isOnline ? 'text-emerald-800' : 'text-slate-600'}`}>
+                <p className={`text-lg font-black tracking-tight transition-colors ${isOnline ? 'text-emerald-800' : 'text-slate-700'}`}>
                   {isOnline ? 'You are ONLINE' : 'You are OFFLINE'}
                 </p>
-                <p className="text-xs text-neutral-500 mt-0.5">
+                <p className="text-xs text-neutral-500 mt-0.5 font-medium">
                   {isOnline
                     ? 'Residents & staff can see you as available'
-                    : 'Tap to go online and start receiving bookings'}
+                    : 'Tap anywhere to go online and start receiving bookings'}
                 </p>
                 {isOnline && skills.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -106,9 +114,15 @@ export const WorkerDashboardView: React.FC<WorkerDashboardViewProps> = ({
             </div>
 
             {/* Toggle Switch */}
-            <div className={`relative w-14 h-8 rounded-full transition-all duration-300 shrink-0 ${
-              isOnline ? 'bg-emerald-500' : 'bg-slate-300'
-            }`}>
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleOnline(!isOnline);
+              }}
+              className={`relative w-14 h-8 rounded-full transition-all duration-300 shrink-0 cursor-pointer shadow-inner ${
+                isOnline ? 'bg-emerald-500' : 'bg-slate-300'
+              }`}
+            >
               <div className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-md transition-all duration-300 ${
                 isOnline ? 'left-7' : 'left-1'
               }`} />

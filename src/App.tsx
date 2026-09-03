@@ -1159,14 +1159,23 @@ export function App() {
             isOnline={workerProfile?.is_online ?? false}
             skills={workerProfile?.worker_skills?.map((sk: any) => sk.skill_name) || []}
             onToggleOnline={async (status) => {
-              if (workerProfile?.id) {
+              // 1. Immediately toggle local worker profile state so UI switch flips instantly
+              setWorkerProfile((prev: any) => ({
+                ...(prev || { id: 'worker-demo', is_online: false }),
+                is_online: status
+              }));
+
+              // 2. Persist to database if worker has a valid ID
+              const workerId = workerProfile?.id;
+              if (workerId && !workerId.startsWith('worker-demo')) {
                 try {
-                  await updateWorkerStatus(workerProfile.id, status);
-                  setWorkerProfile({ ...workerProfile, is_online: status });
+                  await updateWorkerStatus(workerId, status);
                   addToast('success', 'Status Updated', `You are now ${status ? 'Online' : 'Offline'}`);
                 } catch (e) {
-                  addToast('error', 'Failed to update status', 'Please try again.');
+                  addToast('error', 'Failed to sync with DB', 'Updated locally.');
                 }
+              } else {
+                addToast('success', 'Status Updated', `You are now ${status ? 'Online' : 'Offline'}`);
               }
             }}
             onAcceptVisit={async (visitId) => {
