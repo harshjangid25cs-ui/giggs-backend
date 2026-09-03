@@ -32,6 +32,13 @@ interface WorkerSummary {
   created_at: string;
 }
 
+interface LiveEvent {
+  id: string;
+  type: string;
+  label: string;
+  time: string;
+}
+
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -46,9 +53,67 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
   });
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [recentWorkers, setRecentWorkers] = useState<WorkerSummary[]>([]);
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+
+  const addEvent = (type: string, label: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setLiveEvents(prev => [{ id, type, label, time: new Date().toLocaleTimeString('en-IN') }, ...prev].slice(0, 30));
+  };
 
   useEffect(() => {
     loadAll();
+
+    const workerSub = supabase
+      .channel('admin:workers')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'workers' }, (p) => {
+        addEvent('worker', `New worker registered (…${String(p.new.id).slice(-6)})`);
+        loadAll();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'workers' }, (p) => {
+        addEvent('worker_update', `Worker status → ${p.new.verification_status}`);
+        loadAll();
+      })
+      .subscribe();
+
+    const userSub = supabase
+      .channel('admin:users')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'users' }, (p) => {
+        addEvent(p.new.role || 'user', `New ${p.new.role || 'user'} registered: ${p.new.name || 'Unknown'}`);
+        loadAll();
+      })
+      .subscribe();
+
+    const societySub = supabase
+      .channel('admin:societies')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'societies' }, (p) => {
+        addEvent('society', `New society: ${p.new.name || 'Unknown'}`);
+        loadAll();
+      })
+      .subscribe();
+
+    const jobSub = supabase
+      .channel('admin:jobs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs' }, () => {
+        addEvent('job', 'New resident job/booking registered');
+        loadAll();
+      })
+      .subscribe();
+
+    const visitSub = supabase
+      .channel('admin:visits')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'service_visits' }, () => {
+        addEvent('visit', 'New service visit created');
+        loadAll();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(workerSub);
+      supabase.removeChannel(userSub);
+      supabase.removeChannel(societySub);
+      supabase.removeChannel(jobSub);
+      supabase.removeChannel(visitSub);
+    };
   }, []);
 
   const loadAll = async () => {
@@ -409,6 +474,47 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
                 )}
               </div>
             </div>
+          </div>
+
+          {/* ── Live Registrations Feed ── */}
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4 border-b border-neutral-900 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">Live Registrations Feed</h3>
+              </div>
+              <span className="text-[10px] font-mono text-neutral-400">AUTO-UPDATING • ALL PORTALS</span>
+            </div>
+
+            {liveEvents.length === 0 ? (
+              <p className="text-neutral-500 text-xs text-center py-8 font-mono">
+                Listening for new registrations… Activity will appear here in real-time.
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {liveEvents.map((ev) => {
+                  const typeConfig: Record<string, { icon: string; cls: string }> = {
+                    worker:        { icon: 'engineering',   cls: 'bg-white/10 text-white border-white/20' },
+                    worker_update: { icon: 'sync',          cls: 'bg-neutral-800 text-neutral-300 border-neutral-700' },
+                    resident:      { icon: 'person',        cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' },
+                    society:       { icon: 'apartment',     cls: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+                    job:           { icon: 'receipt_long',  cls: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+                    visit:         { icon: 'calendar_today',cls: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+                    user:          { icon: 'person_add',    cls: 'bg-slate-700 text-slate-300 border-slate-600' },
+                  };
+                  const cfg = typeConfig[ev.type] || typeConfig['user'];
+                  return (
+                    <div key={ev.id} className="flex items-center gap-3 py-2 border-b border-neutral-900 last:border-0">
+                      <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 ${cfg.cls}`}>
+                        <span className="material-symbols-outlined text-sm">{cfg.icon}</span>
+                      </div>
+                      <p className="flex-1 text-xs text-neutral-200 font-mono">{ev.label}</p>
+                      <span className="text-[10px] text-neutral-500 font-mono shrink-0">{ev.time}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}
