@@ -41,7 +41,23 @@ export const SocietyDashboardView: React.FC<SocietyDashboardViewProps> = ({
     const baseUrl = window.location.origin;
     const societyParam = encodeURIComponent(visit.societyName || 'society');
     const shareUrl = `${baseUrl}/join/${visit.id}?society=${societyParam}&token=${visit.shareToken}`;
-    const text = `❄️ GIGGS SERVICE VISIT\n\n${visit.title} available at ${visit.societyName || 'your society'}.\n\n${visit.date}\n${visit.timeWindow}\n\n👷 ${visit.proName}\n⭐ ${visit.proRating}\n\nResidents can register here:\n${shareUrl}`;
+    const expiryTime = new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const text = `❄️ GIGGS SERVICE VISIT — GROUP DEAL
+
+🔧 ${visit.title} available at ${visit.societyName || 'your society'}.
+
+📅 ${visit.date}
+⏰ ${visit.timeWindow}
+
+👷 Pro: ${visit.proName} (${visit.proRating}⭐)
+💸 Group Price: ₹${visit.currentRate}/flat (Lower with more residents!)
+
+⚡ HURRY UP! This link expires at ${expiryTime} (1 hour only)
+
+👇 Register NOW before the link expires:
+${shareUrl}
+
+⏳ Don't wait — this discount gets better with more neighbors!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
   };
 

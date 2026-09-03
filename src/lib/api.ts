@@ -101,6 +101,16 @@ export async function registerResidentForVisit(
     throw error;
   }
 
+  // Check 1-hour expiration from visit creation time
+  const createdAt = new Date(data.created_at);
+  const now = new Date();
+  const diffInMs = now.getTime() - createdAt.getTime();
+  const diffInHours = diffInMs / (1000 * 60 * 60);
+
+  if (diffInHours > 1) {
+    throw new Error('This invite link has expired. Links are only valid for 1 hour after creation. Please ask the society staff for a new link.');
+  }
+
   return data;
 }
 

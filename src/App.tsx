@@ -842,8 +842,11 @@ export function App() {
       'Opening WhatsApp to share with your society...'
     );
     
-    // WhatsApp integration
-    const message = `🔧 GIGGS SERVICE VISIT\n\n${visit.title} available at ${visit.societyName}.\n\n📅 ${visit.date}\n⏰ ${visit.timeWindow}\n\n👷 ${visit.proName} (${visit.proRating}⭐)\n💸 Starts at ₹${visit.currentRate}\n\nResidents can register here to secure this price:\n${shareUrl}`;
+    // Compute expiry time (1 hour from now)
+    const expiryTime = new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // WhatsApp integration — include urgency & expiry
+    const message = `❄️ GIGGS SERVICE VISIT — GROUP DEAL\n\n🔧 ${visit.title} available at ${visit.societyName}.\n\n📅 ${visit.date}\n⏰ ${visit.timeWindow}\n\n👷 Pro: ${visit.proName} (${visit.proRating}⭐)\n💸 Group Price: ₹${visit.currentRate}/flat (Price drops with more residents!)\n\n⚡ HURRY UP! This link expires at ${expiryTime} (1 hour only)\n\n👇 Register NOW before the link expires:\n${shareUrl}\n\n⏳ Don't wait — the more neighbors join, the cheaper it gets!`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
   };
 
