@@ -110,7 +110,18 @@ ${shareUrl}
       case 'completed': return 'bg-emerald-100 text-emerald-800';
       case 'in_progress': return 'bg-blue-100 text-blue-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-amber-100 text-amber-800';
+      case 'pending': return 'bg-emerald-100 text-emerald-800'; // Show as Registered (green)
+      default: return 'bg-emerald-100 text-emerald-800';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': return 'Registered';
+      case 'in_progress': return 'In Progress';
+      case 'completed': return 'Completed';
+      case 'cancelled': return 'Cancelled';
+      default: return 'Registered';
     }
   };
 
@@ -226,7 +237,7 @@ ${shareUrl}
                       <div className="pt-2 max-w-md">
                         <div className="flex justify-between text-xs font-semibold mb-1">
                           <span className="text-neutral-700">
-                            {visit.joinedCount} / {visit.targetCount} Residents Registered
+                            {isQueueOpen ? queueJobs.length : visit.joinedCount} / {visit.targetCount} Residents Registered
                           </span>
                           <span className="text-black font-bold">
                             Current: ₹{visit.currentRate}{' '}
@@ -345,7 +356,7 @@ ${shareUrl}
 
                               {/* Status Badge */}
                               <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shrink-0 capitalize ${getStatusColor(job.status)}`}>
-                                {job.status.replace('_', ' ')}
+                                {getStatusLabel(job.status)}
                               </span>
                             </div>
                           ))}
@@ -360,28 +371,36 @@ ${shareUrl}
         </div>
       </section>
 
-      {/* Society Recent Activity */}
+      {/* Society Recent Activity — real data from queueJobs */}
       <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
         <h3 className="font-bold text-base text-neutral-900 mb-3">Live Society Activity Feed</h3>
         <div className="space-y-3 text-xs">
-          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="w-2 h-2 rounded-full bg-emerald-600" />
-            <span className="font-semibold text-neutral-900">Flat A-104 (Amit Sharma)</span>
-            <span className="text-neutral-500">registered for AC Servicing visit.</span>
-            <span className="ml-auto text-neutral-400">5m ago</span>
-          </div>
-          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="w-2 h-2 rounded-full bg-blue-600" />
-            <span className="font-semibold text-neutral-900">Pro Alex M.</span>
-            <span className="text-neutral-500">completed Plumbing Fix in 4B.</span>
-            <span className="ml-auto text-neutral-400">42m ago</span>
-          </div>
-          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-            <span className="w-2 h-2 rounded-full bg-amber-600" />
-            <span className="font-semibold text-neutral-900">Tier 2 Group Discount</span>
-            <span className="text-neutral-500">unlocked for Green Valley (Rate reduced to ₹449).</span>
-            <span className="ml-auto text-neutral-400">1h ago</span>
-          </div>
+          {queueJobs.length > 0 ? (
+            queueJobs.slice(0, 5).map((job) => {
+              const timeAgo = (() => {
+                const ms = Date.now() - new Date(job.created_at).getTime();
+                const mins = Math.floor(ms / 60000);
+                if (mins < 1) return 'just now';
+                if (mins < 60) return `${mins}m ago`;
+                return `${Math.floor(mins / 60)}h ago`;
+              })();
+              return (
+                <div key={job.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="font-semibold text-neutral-900">
+                    Flat {job.flat_no}{job.resident?.name ? ` (${job.resident.name})` : ''}
+                  </span>
+                  <span className="text-neutral-500">registered for service visit.</span>
+                  <span className="ml-auto text-neutral-400 whitespace-nowrap">{timeAgo}</span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+              <span className="w-2 h-2 rounded-full bg-neutral-300" />
+              <span className="text-neutral-400">No activity yet. Share a visit link to get started.</span>
+            </div>
+          )}
         </div>
       </section>
     </div>

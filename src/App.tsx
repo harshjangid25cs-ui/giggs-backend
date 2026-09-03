@@ -545,7 +545,7 @@ export function App() {
     handleNavigate('resident_invite');
   };
 
-  const handleRegisterSuccess = async (visitId: string, flatNo: string, phone: string, slot: string) => {
+  const handleRegisterSuccess = async (visitId: string, flatNo: string, phone: string, slot: string, name?: string) => {
     let visitTitle = 'AC Servicing & Maintenance';
     let visitCategory = 'ac';
     let visitWorker = 'Ramesh Kumar';
@@ -554,7 +554,8 @@ export function App() {
 
     try {
       let residentId = authSession?.user?.id;
-      const residentName = authSession?.user?.name || `Flat ${flatNo} Resident`;
+      // Prefer the name entered in the form, then session name, then flat-based fallback
+      const residentName = name || authSession?.user?.name || `Flat ${flatNo} Resident`;
       
       if (!residentId) {
         // Find by phone or use default demo resident
@@ -564,7 +565,7 @@ export function App() {
           .eq('phone', phone)
           .single();
           
-        residentId = userData?.id || '11111111-1111-1111-1111-111111111111'; // Fallback to Arun Verma
+        residentId = userData?.id || '11111111-1111-1111-1111-111111111111';
       }
 
       // Pass phone and name so the API can create a user row if needed

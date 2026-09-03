@@ -6,7 +6,7 @@ import { getServiceVisitByToken } from '../../lib/api';
 interface ResidentInviteViewProps {
   visit?: ServiceVisit;
   onNavigate: (screen: ScreenId) => void;
-  onRegisterSuccess: (visitId: string, flatNo: string, phone: string, slot: string) => void | Promise<void>;
+  onRegisterSuccess: (visitId: string, flatNo: string, phone: string, slot: string, name?: string) => void | Promise<void>;
 }
 
 export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
@@ -14,6 +14,7 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
   onNavigate,
   onRegisterSuccess
 }) => {
+  const [residentName, setResidentName] = useState('');
   const [visit, setVisit] = useState<ServiceVisit | undefined>(initialVisit);
   const [flatNo, setFlatNo] = useState('');
   const [phone, setPhone] = useState('');
@@ -121,6 +122,10 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!residentName.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
     if (!flatNo.trim()) {
       setError('Please enter your Flat or Villa number');
       return;
@@ -133,7 +138,7 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
     setError('');
     setIsSubmitting(true);
     const formattedPhone = `+91 ${cleanPhone}`;
-    await onRegisterSuccess(visit?.id || '', flatNo, formattedPhone, timeSlot || 'Any time during the day');
+    await onRegisterSuccess(visit?.id || '', flatNo, formattedPhone, timeSlot || 'Any time during the day', residentName.trim());
     setIsSubmitting(false);
   };
 
@@ -287,9 +292,25 @@ export const ResidentInviteView: React.FC<ResidentInviteViewProps> = ({
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Name Field */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1" htmlFor="resident_name">
+                  Your Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 focus:border-black focus:ring-1 focus:ring-black text-neutral-900 text-sm py-2.5 px-3.5 placeholder:text-neutral-400 outline-none transition-all"
+                  id="resident_name"
+                  placeholder="e.g. Rahul Sharma"
+                  type="text"
+                  value={residentName}
+                  onChange={(e) => setResidentName(e.target.value)}
+                  required
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1" htmlFor="flat_no">
-                  Flat / Villa No.
+                  Flat / Villa No. <span className="text-red-500">*</span>
                 </label>
                 <input
                   className="w-full rounded-xl border border-slate-300 focus:border-black focus:ring-1 focus:ring-black text-neutral-900 text-sm py-2.5 px-3.5 placeholder:text-neutral-400 outline-none transition-all"
